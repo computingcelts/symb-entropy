@@ -1,0 +1,6 @@
+# Symbolic Entropy (SE)
+Symbolic Entropy (SE) combines Shannon entropy (H) with Symbolic Surplus (SΣ),  motif-concentration metric computed via Kullback–Leibler (KL) divergence.
+
+Existing Natural Language Processing (NLP) methods described as semantic fail to detect the destruction of meaning when text is shuffled, exposing a discriminant validity gap in computational semantics. We introduce Symbolic Entropy (SE), a two-component information-theoretic methodology combining Shannon entropy (H) with Symbolic Surplus (SΣ), a motif- concentration metric computed via Kullback–Leibler (KL) divergence. SE tracks order-sensitive narrative semantic structure as theorized by Lubomır Dolezel. We apply a shuffle test to seven widely-used NLP methods and to SE on two corpora: Genesis 1–3 (KJV) and Tolkien’s The Fellowship of the Ring.
+
+No tested method produces a single metric display that detects both word-order and sentence-order disruption simultaneously. SE consistently produces distinguishable heatmap outputs across original, word-shuffled, and sentence-shuffled conditions in both corpora, demonstrating order-sensitive semantic measurement where many existing methods fail. The SE method here proposed can be used for semantic-based retrieval tasks as well for indexing and classification of documents.
