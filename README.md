@@ -1,4 +1,4 @@
-# Symbolic Category Entropy (SE)
+# Symbolic Category Entropy (ScE)
 Symbolic Category Entropy (ScE) combines Shannon entropy (H) with Symbolic Surplus (SΣ),  motif-concentration metric computed via Kullback–Leibler (KL) divergence.
 
 Existing Natural Language Processing (NLP) methods described as semantic fail to detect the destruction of meaning when text is shuffled, exposing a discriminant validity gap in computational semantics. We introduce Symbolic Entropy (ScE), a two-component information-theoretic methodology combining Shannon entropy (H) with Symbolic Surplus (SΣ), a motif- concentration metric computed via Kullback–Leibler (KL) divergence. SE tracks order-sensitive narrative semantic structure as theorized by Lubomır Dolezel. We apply a shuffle test to seven widely-used NLP methods and to SE on two corpora: Genesis 1–3 (KJV) and Tolkien’s The Fellowship of the Ring.
