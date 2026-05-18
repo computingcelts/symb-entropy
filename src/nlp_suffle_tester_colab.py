@@ -227,6 +227,12 @@ class ComputePerplexity(NLPMethod):
 
     def __init__(self, method_name):
         self.method_name = method_name
+
+        print("Loading GPT-2 model...")
+        self.gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
+        self.gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+        print("✓ Model loaded")
+
     
     def calculate_window_perplexity(self, text, window_size=200):
         """Calculate perplexity for each window"""
@@ -237,9 +243,9 @@ class ComputePerplexity(NLPMethod):
 
         for i, window in enumerate(windows):
             try:
-                encodings = gpt2_tokenizer(window, return_tensors='pt', truncation=True, max_length=200)
+                encodings = self.gpt2_tokenizer(window, return_tensors='pt', truncation=True, max_length=200)
                 with torch.no_grad():
-                    outputs = gpt2_model(**encodings, labels=encodings.input_ids)
+                    outputs = self.gpt2_model(**encodings, labels=encodings.input_ids)
                     perplexity = torch.exp(outputs.loss).item()
                     perplexities.append(perplexity)
             except:
@@ -251,18 +257,14 @@ class ComputePerplexity(NLPMethod):
         return np.array(perplexities)
 
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
-        print("Loading GPT-2 model...")
-        gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
-        gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-        print("✓ Model loaded")
-
-        print("\n⚙️  Calculating perplexity for ORIGINAL text...")
+        
+        print("\n⚙️  Calculating " + self.method_name + " for ORIGINAL text...")
         original_ppls = self.calculate_window_perplexity(original_text)
 
-        print("\n⚙️  Calculating perplexity for WORD-SHUFFLED text...")
+        print("\n⚙️  Calculating " + self.method_name + " for WORD-SHUFFLED text...")
         word_shuf_ppls = self.calculate_window_perplexity(word_shuffled_text)
 
-        print("\n⚙️  Calculating perplexity for SENTENCE-SHUFFLED text...")
+        print("\n⚙️  Calculating " + self.method_name + " for SENTENCE-SHUFFLED text...")
         sent_shuf_ppls = self.calculate_window_perplexity(sentence_shuffled_text)
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_ppls, word_shuf_ppls)
@@ -271,6 +273,12 @@ class ComputePerplexity(NLPMethod):
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_ppls))
 
         super().print_results()
+
+        # Clean up memory
+        # TODO: review to make sure I understand what this is doing
+        del self.gpt2_model, self.gpt2_tokenizer
+        torch.cuda.empty_cache()
+
 
 
 def analyze_sentiment_chunks(text):
@@ -602,52 +610,8 @@ def main():
     print("STATUS: ✅ Pre-trained model - valid comparison")
     print("="*80)
 
-    print("Loading GPT-2 model...")
-    gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
-    gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-    print("✓ Model loaded")
-
     compute_perplexity = ComputePerplexity('Perplexity')
     compute_perplexity.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
-
-    # print("\n⚙️  Calculating perplexity for ORIGINAL text...")
-    # original_ppls = calculate_window_perplexity(original_text)
-
-    # print("\n⚙️  Calculating perplexity for WORD-SHUFFLED text...")
-    # word_shuf_ppls = calculate_window_perplexity(word_shuffled_text)
-
-    # print("\n⚙️  Calculating perplexity for SENTENCE-SHUFFLED text...")
-    # sent_shuf_ppls = calculate_window_perplexity(sent_shuffled_text)
-
-    # d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_ppls, word_shuf_ppls)
-    # d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_ppls, sent_shuf_ppls)
-
-    # results['Perplexity'] = {
-    #     'd_vs_word': d_word,
-    #     'd_vs_sent': d_sent,
-    #     'original_mean': orig_mean,
-    #     'word_shuf_mean': word_mean,
-    #     'sent_shuf_mean': sent_mean,
-    #     'original_std': orig_std,
-    #     'word_shuf_std': word_std,
-    #     'sent_shuf_std': sent_std,
-    #     'n_observations': len(original_ppls)
-    # }
-
-    # print(f"\n✓ Perplexity complete:")
-    # print(f"   d(orig vs word-shuf) = {d_word:.2f}")
-    # print(f"   d(orig vs sent-shuf) = {d_sent:.2f}")
-    # print(f"   (n={len(original_ppls)} windows)")
-
-    # Clean up memory
-    del gpt2_model, gpt2_tokenizer
-    torch.cuda.empty_cache()
-
-
-    # ============================================================================
-    # METHOD 2: SENTIMENT ANALYSIS
-    # ============================================================================
-    # STATUS: ✅ VALID - Uses pre-trained model, no fitting on test data
 
     print("\n" + "="*80)
     print("METHOD 2/7: Sentiment Analysis")
