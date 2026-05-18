@@ -56,6 +56,51 @@ results = {}
 selected_files = []
 input_files = {}
 
+class NLPMethod:
+    method_name = ''
+
+    results_data = {
+        'd_vs_word': 0.0,
+        'd_vs_sent': 0.0,
+        'original_mean': 0.0,
+        'word_shuf_mean': 0.0,
+        'sent_shuf_mean': 0.0,
+        'original_std': 0.0,
+        'word_shuf_std': 0.0,
+        'sent_shuf_std': 0.0,
+        'n_observations': 0
+    }
+    
+    # ctor
+    def __init__(self, method_name):
+        self.method_name = method_name
+
+    # override this method with a specific computation
+    # expects two texts as input
+    def compute_method(self, original_text, comparison_text):
+        print('Processing method: ', self.method_name)
+
+    def set_results(self, d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, original_length):
+        self.results_data = {
+            'd_vs_word': d_word,
+            'd_vs_sent': d_sent,
+            'original_mean': orig_mean,
+            'word_shuf_mean': word_mean,
+            'sent_shuf_mean': sent_mean,
+            'original_std': orig_std,
+            'word_shuf_std': word_std,
+            'sent_shuf_std': sent_std,
+            'n_observations': original_length
+        }
+
+    def print_results(self):
+        print(f"\n✓ " + self.method_name + " complete:")
+        print(f"   d(orig vs word-shuf) = {self.results_data['d_vs_word']:.2f}")
+        print(f"   d(orig vs sent-shuf) = {self.results_data['d_vs_sent']:.2f}")
+        print(f"   (n={self.results_data['n_observations']} windows)")
+
+
+#TODO: remove this once moved into class
 results_data = {
     'd_vs_word': 0.0,
     'd_vs_sent': 0.0,
@@ -67,6 +112,7 @@ results_data = {
     'sent_shuf_std': 0.0,
     'n_observations': 0
 }
+
 
 
 def validation_function(answers, current):
@@ -177,27 +223,54 @@ def split_sentences(text):
             sentences.append(sent)
     return sentences
 
-def calculate_window_perplexity(text, window_size=200):
-    """Calculate perplexity for each window"""
-    windows = split_into_windows(text, window_size=window_size)
-    perplexities = []
+class ComputePerplexity(NLPMethod):
 
-    print(f"   Processing {len(windows)} windows...")
+    def __init__(self, method_name):
+        self.method_name = method_name
+    
+    def calculate_window_perplexity(self, text, window_size=200):
+        """Calculate perplexity for each window"""
+        windows = split_into_windows(text, window_size=window_size)
+        perplexities = []
 
-    for i, window in enumerate(windows):
-        try:
-            encodings = gpt2_tokenizer(window, return_tensors='pt', truncation=True, max_length=200)
-            with torch.no_grad():
-                outputs = gpt2_model(**encodings, labels=encodings.input_ids)
-                perplexity = torch.exp(outputs.loss).item()
-                perplexities.append(perplexity)
-        except:
-            continue
+        print(f"   Processing {len(windows)} windows...")
 
-        if (i + 1) % 20 == 0:
-            print(f"   Processed {i + 1}/{len(windows)} windows...")
+        for i, window in enumerate(windows):
+            try:
+                encodings = gpt2_tokenizer(window, return_tensors='pt', truncation=True, max_length=200)
+                with torch.no_grad():
+                    outputs = gpt2_model(**encodings, labels=encodings.input_ids)
+                    perplexity = torch.exp(outputs.loss).item()
+                    perplexities.append(perplexity)
+            except:
+                continue
 
-    return np.array(perplexities)
+            if (i + 1) % 20 == 0:
+                print(f"   Processed {i + 1}/{len(windows)} windows...")
+
+        return np.array(perplexities)
+
+    def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
+        print("Loading GPT-2 model...")
+        gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
+        gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+        print("✓ Model loaded")
+
+        print("\n⚙️  Calculating perplexity for ORIGINAL text...")
+        original_ppls = self.calculate_window_perplexity(original_text)
+
+        print("\n⚙️  Calculating perplexity for WORD-SHUFFLED text...")
+        word_shuf_ppls = self.calculate_window_perplexity(word_shuffled_text)
+
+        print("\n⚙️  Calculating perplexity for SENTENCE-SHUFFLED text...")
+        sent_shuf_ppls = self.calculate_window_perplexity(sentence_shuffled_text)
+
+        d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_ppls, word_shuf_ppls)
+        d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_ppls, sent_shuf_ppls)
+
+        super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_ppls))
+
+        super().print_results()
 
 
 def analyze_sentiment_chunks(text):
@@ -534,34 +607,37 @@ def main():
     gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
     print("✓ Model loaded")
 
-    print("\n⚙️  Calculating perplexity for ORIGINAL text...")
-    original_ppls = calculate_window_perplexity(original_text)
+    compute_perplexity = ComputePerplexity('Perplexity')
+    compute_perplexity.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
 
-    print("\n⚙️  Calculating perplexity for WORD-SHUFFLED text...")
-    word_shuf_ppls = calculate_window_perplexity(word_shuffled_text)
+    # print("\n⚙️  Calculating perplexity for ORIGINAL text...")
+    # original_ppls = calculate_window_perplexity(original_text)
 
-    print("\n⚙️  Calculating perplexity for SENTENCE-SHUFFLED text...")
-    sent_shuf_ppls = calculate_window_perplexity(sent_shuffled_text)
+    # print("\n⚙️  Calculating perplexity for WORD-SHUFFLED text...")
+    # word_shuf_ppls = calculate_window_perplexity(word_shuffled_text)
 
-    d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_ppls, word_shuf_ppls)
-    d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_ppls, sent_shuf_ppls)
+    # print("\n⚙️  Calculating perplexity for SENTENCE-SHUFFLED text...")
+    # sent_shuf_ppls = calculate_window_perplexity(sent_shuffled_text)
 
-    results['Perplexity'] = {
-        'd_vs_word': d_word,
-        'd_vs_sent': d_sent,
-        'original_mean': orig_mean,
-        'word_shuf_mean': word_mean,
-        'sent_shuf_mean': sent_mean,
-        'original_std': orig_std,
-        'word_shuf_std': word_std,
-        'sent_shuf_std': sent_std,
-        'n_observations': len(original_ppls)
-    }
+    # d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_ppls, word_shuf_ppls)
+    # d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_ppls, sent_shuf_ppls)
 
-    print(f"\n✓ Perplexity complete:")
-    print(f"   d(orig vs word-shuf) = {d_word:.2f}")
-    print(f"   d(orig vs sent-shuf) = {d_sent:.2f}")
-    print(f"   (n={len(original_ppls)} windows)")
+    # results['Perplexity'] = {
+    #     'd_vs_word': d_word,
+    #     'd_vs_sent': d_sent,
+    #     'original_mean': orig_mean,
+    #     'word_shuf_mean': word_mean,
+    #     'sent_shuf_mean': sent_mean,
+    #     'original_std': orig_std,
+    #     'word_shuf_std': word_std,
+    #     'sent_shuf_std': sent_std,
+    #     'n_observations': len(original_ppls)
+    # }
+
+    # print(f"\n✓ Perplexity complete:")
+    # print(f"   d(orig vs word-shuf) = {d_word:.2f}")
+    # print(f"   d(orig vs sent-shuf) = {d_sent:.2f}")
+    # print(f"   (n={len(original_ppls)} windows)")
 
     # Clean up memory
     del gpt2_model, gpt2_tokenizer
