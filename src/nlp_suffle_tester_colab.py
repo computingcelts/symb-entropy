@@ -353,8 +353,8 @@ class ComputeSentiment(NLPMethod):
         super().print_results()
 
         # TODO: check this out what it does
-        # del self.sentiment_analyzer
-        # torch.cuda.empty_cache()
+        del self.sentiment_analyzer
+        torch.cuda.empty_cache()
 
 class ComputeTF_IDF(NLPMethod):
 
