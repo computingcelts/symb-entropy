@@ -55,6 +55,18 @@ results = {}
 selected_files = []
 input_files = {}
 
+# change to 1 those methods to run
+list_of_methods = {'Perplexity': 0,
+                    'Sentiment': 0,
+                    'TF-IDF' :1,
+                    'NER': 1,
+                    'LDA': 0,
+                    'BERTScore':0,
+                    'BERTopic' :0
+            }
+
+total_methods = sum(list_of_methods.values())
+
 class NLPMethod:
     method_name = ''
 
@@ -99,21 +111,6 @@ class NLPMethod:
         print(f"   (n={self.results_data['n_observations']} windows)")
 
 
-#TODO: remove this once moved into class
-results_data = {
-    'd_vs_word': 0.0,
-    'd_vs_sent': 0.0,
-    'original_mean': 0.0,
-    'word_shuf_mean': 0.0,
-    'sent_shuf_mean': 0.0,
-    'original_std': 0.0,
-    'word_shuf_std': 0.0,
-    'sent_shuf_std': 0.0,
-    'n_observations': 0
-}
-
-
-
 def validation_function(answers, current):
     print('Current selected value(s): ', current)
     if len(current) == 0:
@@ -121,19 +118,19 @@ def validation_function(answers, current):
             '', reason='You have to select at least one option.')
     return True
 
-def get_txt_files(path):
+def get_txt_doc_files(path):
     if not os.path.isdir(path):
         return []
     return sorted([
         filename for filename in os.listdir(path)
-        if os.path.isfile(os.path.join(path, filename)) and filename.endswith('.txt')
+        if os.path.isfile(os.path.join(path, filename)) and (filename.endswith('.txt') or filename.endswith('.docx'))
     ])
 
 
 def select_files_to_process(directory_path):
-    files = get_txt_files(directory_path)
+    files = get_txt_doc_files(directory_path)
     if not files:
-        print(f"No .txt files found in {directory_path}. Choose a different directory.")
+        print(f"No .txt .docx files found in {directory_path}. Choose a different directory.")
         return []
 
     choices = ['All'] + files + ['Exit']
@@ -224,15 +221,14 @@ def split_sentences(text):
 
 class ComputePerplexity(NLPMethod):
 
-    def __init__(self, method_name):
-        self.method_name = method_name
+    def __init__(self):
+        self.method_name = 'Perplexity'
 
         print("Loading GPT-2 model...")
         self.gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
         self.gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
         print("✓ Model loaded")
 
-    
     def calculate_window_perplexity(self, text, window_size=200):
         """Calculate perplexity for each window"""
         windows = split_into_windows(text, window_size=window_size)
@@ -258,18 +254,18 @@ class ComputePerplexity(NLPMethod):
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
         
         print("\n⚙️  Calculating " + self.method_name + " for ORIGINAL text...")
-        original_ppls = self.calculate_window_perplexity(original_text)
+        original_analysis = self.calculate_window_perplexity(original_text)
 
         print("\n⚙️  Calculating " + self.method_name + " for WORD-SHUFFLED text...")
-        word_shuf_ppls = self.calculate_window_perplexity(word_shuffled_text)
+        word_shuffled_analysis = self.calculate_window_perplexity(word_shuffled_text)
 
         print("\n⚙️  Calculating " + self.method_name + " for SENTENCE-SHUFFLED text...")
-        sent_shuf_ppls = self.calculate_window_perplexity(sentence_shuffled_text)
+        sentence_shuffled_analysis = self.calculate_window_perplexity(sentence_shuffled_text)
 
-        d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_ppls, word_shuf_ppls)
-        d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_ppls, sent_shuf_ppls)
+        d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
+        d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
 
-        super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_ppls))
+        super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
         super().print_results()
 
@@ -278,11 +274,10 @@ class ComputePerplexity(NLPMethod):
         del self.gpt2_model, self.gpt2_tokenizer
         torch.cuda.empty_cache()
 
-
 class ComputeSentiment(NLPMethod):
 
-    def __init__(self, method_name):
-        self.method_name = method_name
+    def __init__(self):
+        self.method_name = 'Sentiment'
         print("Loading sentiment model...")
 
         self.sentiment_analyzer = pipeline("sentiment-analysis",
@@ -345,74 +340,19 @@ class ComputeSentiment(NLPMethod):
         del self.sentiment_analyzer
         torch.cuda.empty_cache()
 
-class ComputePerplexity(NLPMethod):
-
-    def __init__(self, method_name):
-        self.method_name = method_name
-
-        print("Loading GPT-2 model...")
-        self.gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
-        self.gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-        print("✓ Model loaded")
-
-    def calculate_window_perplexity(self, text, window_size=200):
-        """Calculate perplexity for each window"""
-        windows = split_into_windows(text, window_size=window_size)
-        perplexities = []
-
-        print(f"   Processing {len(windows)} windows...")
-
-        for i, window in enumerate(windows):
-            try:
-                encodings = self.gpt2_tokenizer(window, return_tensors='pt', truncation=True, max_length=200)
-                with torch.no_grad():
-                    outputs = self.gpt2_model(**encodings, labels=encodings.input_ids)
-                    perplexity = torch.exp(outputs.loss).item()
-                    perplexities.append(perplexity)
-            except:
-                continue
-
-            if (i + 1) % 20 == 0:
-                print(f"   Processed {i + 1}/{len(windows)} windows...")
-
-        return np.array(perplexities)
-
-    def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
-        
-        print("\n⚙️  Calculating " + self.method_name + " for ORIGINAL text...")
-        original_analysis = self.calculate_window_perplexity(original_text)
-
-        print("\n⚙️  Calculating " + self.method_name + " for WORD-SHUFFLED text...")
-        word_shuffled_analysis = self.calculate_window_perplexity(word_shuffled_text)
-
-        print("\n⚙️  Calculating " + self.method_name + " for SENTENCE-SHUFFLED text...")
-        sentence_shuffled_analysis = self.calculate_window_perplexity(sentence_shuffled_text)
-
-        d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
-        d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
-
-        super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
-
-        super().print_results()
-
-        # Clean up memory
-        # TODO: review to make sure I understand what this is doing
-        del self.gpt2_model, self.gpt2_tokenizer
-        torch.cuda.empty_cache()
-
 class ComputeTF_IDF(NLPMethod):
 
-    def __init__(self, method_name):
-        self.method_name = method_name
+    def __init__(self):
+        self.method_name = 'TF-IDF'
         
-    def calculate_tfidf_coherence_corrected(self, original_text, word_shuf_text, sent_shuf_text):
+    def calculate_tfidf_coherence_corrected(self, original_text, word_shuffled_text, sentence_shuffled_text):
         """
         Calculate TF-IDF similarity between consecutive sentences.
         CORRECTED: Fit vectorizer on ORIGINAL sentences only, then transform all conditions.
         """
         orig_sentences = split_sentences(original_text)
-        word_sentences = split_sentences(word_shuf_text)
-        sent_sentences = split_sentences(sent_shuf_text)
+        word_sentences = split_sentences(word_shuffled_text)
+        sent_sentences = split_sentences(sentence_shuffled_text)
 
         if len(orig_sentences) < 2:
             return np.array([0.0]), np.array([0.0]), np.array([0.0])
@@ -465,11 +405,11 @@ class ComputeTF_IDF(NLPMethod):
 
 class ComputeNER(NLPMethod):
 
-    def __init__(self, method_name):
+    def __init__(self):
         # spacy has to be imported here to avoid a bus error with OS semaphores
         import spacy
 
-        self.method_name = method_name
+        self.method_name = 'NER'
 
         print("Loading spaCy NER model...")
         self.nlp = spacy.load("en_core_web_sm")
@@ -507,9 +447,6 @@ class ComputeNER(NLPMethod):
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
 
-        d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
-        d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
-
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
         super().print_results()   
@@ -517,8 +454,8 @@ class ComputeNER(NLPMethod):
 
 class ComputeLDA(NLPMethod):
 
-    def __init__(self, method_name):
-        self.method_name = method_name
+    def __init__(self):
+        self.method_name = 'LDA'
         print("\n⚙️  Running " + self.method_name + " (single model)...")
 
 
@@ -622,10 +559,9 @@ class ComputeLDA(NLPMethod):
 
 class ComputeBERTSCORE(NLPMethod):
 
-    def __init__(self, method_name):
-        self.method_name = method_name
+    def __init__(self):
+        self.method_name = 'BERTScore'
         print("Running " + self.method_name + " (Sequential Coherence)")
-
 
 
     def calculate_bertscore_window_coherence(self, text, window_size=50):
@@ -682,10 +618,10 @@ class ComputeBERTSCORE(NLPMethod):
 
     
 
-class COMPUTE_BERTOPIC(NLPMethod):
+class COMPUTE_BERTopic(NLPMethod):
 
-    def __init__(self, method_name):
-        self.method_name = method_name
+    def __init__(self):
+        self.method_name = 'BERTopic'
 
         print(self.method_name)
 
@@ -727,14 +663,8 @@ class COMPUTE_BERTOPIC(NLPMethod):
         return orig_max_probs, word_max_probs, sent_max_probs
     
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):    
-        print("\n⚙️  Calculating sequential coherence for ORIGINAL...")
-        original_analysis = self.calculate_bertopic_corrected(original_text)
-
-        print("\n⚙️  Calculating sequential coherence for WORD-SHUFFLED...")
-        word_shuffled_analysis = self.calculate_bertopic_corrected(word_shuffled_text)
-
-        print("\n⚙️  Calculating sequential coherence for SENTENCE-SHUFFLED...")
-        sentence_shuffled_analysis = self.calculate_bertopic_corrected(sentence_shuffled_text)
+        print("\n⚙️  Running BERTopic (single model)...")
+        original_analysis, word_shuffled_analysis, sentence_shuffled_analysis  = self.calculate_bertopic_corrected(original_text, word_shuffled_text, sentence_shuffled_text)
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)    
@@ -781,18 +711,14 @@ def main():
             if "original" in path:
                 print("\n📤 Upload ORIGINAL file (.docx or .txt):")
                 input_files['original'] = path
-                # TODO: remove these lines since info is now in a dict
-                uploaded_original = path
 
             if "word_randomized" in path:
                 print("\n📤 Upload WORD-SHUFFLED file (.docx or .txt):")
                 input_files['word_randomized'] = path
-                uploaded_word_shuffled = path
 
             if "sentence_shuffled" in path:
                 print("\n📤 Upload SENTENCE-SHUFFLED file (.docx or .txt):")
                 input_files['sentence_shuffled'] = path
-                uploaded_sent_shuffled = path        
     else:
         print("No files selected.")
 
@@ -810,235 +736,271 @@ def main():
     # TODO: find a way to repeat this for more than one text 
     #for file in input_files.values:
 
-    # ============================================================================
-    # METHOD 1: PERPLEXITY (GPT-2) - SLIDING WINDOW VERSION
-    # ============================================================================
-    # STATUS: ✅ VALID - Uses pre-trained model, no fitting on test data
+    methods_run = 0
+    executed_methods = []
 
-    print("\n" + "="*80)
-    print("METHOD 1/7: GPT-2 Perplexity (Sliding Window)")
-    print("STATUS: ✅ Pre-trained model - valid comparison")
-    print("="*80)
+    for method, run in list_of_methods.items():    
 
-    # compute_perplexity = ComputePerplexity('Perplexity')
-    # compute_perplexity.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+        if method == 'Perplexity' and run ==1 :
+            methods_run += 1
 
-    print("\n" + "="*80)
-    print("METHOD 2/7: Sentiment Analysis")
-    print("STATUS: ✅ Pre-trained model - valid comparison")
-    print("="*80)
+            # ============================================================================
+            # METHOD 1: PERPLEXITY (GPT-2) - SLIDING WINDOW VERSION
+            # ============================================================================
+            # STATUS: ✅ VALID - Uses pre-trained model, no fitting on test data
 
-    # compute_sentiment = ComputeSentiment('Sentiment Analysis')
-    # compute_sentiment.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + ": GPT-2 Perplexity (Sliding Window)")
+            print("STATUS: ✅ Pre-trained model - valid comparison")
+            print("="*80)
+
+            compute_perplexity = ComputePerplexity()
+            compute_perplexity.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_perplexity)
+
+        if method == 'Sentiment' and run ==1 :
+
+            methods_run += 1
+            
+
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + " Sentiment Analysis")
+            print("STATUS: ✅ Pre-trained model - valid comparison")
+            print("="*80)
+
+            compute_sentiment = ComputeSentiment()
+            compute_sentiment.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_sentiment)
+
+        if method == 'TF-IDF' and run ==1 :
+            methods_run += 1
+
+            # ============================================================================
+            # METHOD 3: TF-IDF (CORRECTED)
+            # ============================================================================
+            # STATUS: 🔧 CORRECTED - Now fits vectorizer on ORIGINAL only, transforms all
+
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + " TF-IDF Coherence")
+            print("STATUS: 🔧 CORRECTED - Vectorizer fit on original only")
+            print("="*80)
+
+            print("\n⚙️  Calculating TF-IDF coherence (single vectorizer)...")
+
+            compute_tf_idf = ComputeTF_IDF()
+            compute_tf_idf.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_tf_idf)
+
+        if method == 'NER' and run ==1 :
+            methods_run += 1
 
 
-    # ============================================================================
-    # METHOD 3: TF-IDF (CORRECTED)
-    # ============================================================================
-    # STATUS: 🔧 CORRECTED - Now fits vectorizer on ORIGINAL only, transforms all
+            # ============================================================================
+            # METHOD 4: NER - SENTENCE-LEVEL VERSION
+            # ============================================================================
+            # STATUS: ✅ VALID - Uses pre-trained model, no fitting on test data
 
-    print("\n" + "="*80)
-    print("METHOD 3/7: TF-IDF Coherence")
-    print("STATUS: 🔧 CORRECTED - Vectorizer fit on original only")
-    print("="*80)
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + " Named Entity Recognition (Sentence-Level)")
+            print("STATUS: ✅ Pre-trained model - valid comparison")
+            print("="*80)
 
-    print("\n⚙️  Calculating TF-IDF coherence (single vectorizer)...")
+            compute_ner = ComputeNER()
+            compute_ner.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_ner)
 
-    # compute_tf_idf = ComputeTF_IDF("TF-IDF")
-    # compute_tf_idf.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+        if method == 'LDA' and run ==1 :
+            methods_run += 1
 
-    # ============================================================================
-    # METHOD 4: NER - SENTENCE-LEVEL VERSION
-    # ============================================================================
-    # STATUS: ✅ VALID - Uses pre-trained model, no fitting on test data
 
-    print("\n" + "="*80)
-    print("METHOD 4/7: Named Entity Recognition (Sentence-Level)")
-    print("STATUS: ✅ Pre-trained model - valid comparison")
-    print("="*80)
+            # # ============================================================================
+            # # METHOD 5: LDA - DOCUMENT-LEVEL TOPIC PROBABILITIES (CORRECTED)
+            # # ============================================================================
+            # # STATUS: 🔧 CORRECTED - Now trains on ORIGINAL only, infers on all conditions
 
-    compute_ner = ComputeNER("NER")
-    compute_ner.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + " LDA Topic Modeling (Document-Level Probabilities)")
+            print("STATUS: 🔧 CORRECTED - Model trained on original only")
+            print("="*80)
 
-    # # ============================================================================
-    # # METHOD 5: LDA - DOCUMENT-LEVEL TOPIC PROBABILITIES (CORRECTED)
-    # # ============================================================================
-    # # STATUS: 🔧 CORRECTED - Now trains on ORIGINAL only, infers on all conditions
+            # print("\n⚙️  Running LDA (single model)...")
 
-    print("\n" + "="*80)
-    print("METHOD 5/7: LDA Topic Modeling (Document-Level Probabilities)")
-    print("STATUS: 🔧 CORRECTED - Model trained on original only")
-    print("="*80)
+            compute_lda = ComputeLDA()
+            compute_lda.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_lda)
 
-    # print("\n⚙️  Running LDA (single model)...")
+        if method == 'BERTScore' and run ==1 :
+            methods_run += 1
 
-    compute_lda = ComputeLDA("LDA")
-    compute_lda.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
 
-    # ============================================================================
-    # METHOD 6: BERTSCORE - SEQUENTIAL COHERENCE (CORRECTED)
-    # ============================================================================
-    # STATUS: 🔧 CORRECTED - Uses fixed-size windows instead of period-based splitting
-    # 
-    # ISSUE WITH ORIGINAL: Splitting by periods in word-shuffled text creates
-    # arbitrary chunks (periods land randomly among words), making comparison invalid.
-    #
-    # FIX: Use fixed-size token windows. This ensures we're comparing the same
-    # positional structure across all conditions.
+            # ============================================================================
+            # METHOD 6: BERTSCORE - SEQUENTIAL COHERENCE (CORRECTED)
+            # ============================================================================
+            # STATUS: 🔧 CORRECTED - Uses fixed-size windows instead of period-based splitting
+            # 
+            # ISSUE WITH ORIGINAL: Splitting by periods in word-shuffled text creates
+            # arbitrary chunks (periods land randomly among words), making comparison invalid.
+            #
+            # FIX: Use fixed-size token windows. This ensures we're comparing the same
+            # positional structure across all conditions.
 
-    print("\n" + "="*80)
-    print("METHOD 6/7: BERTScore (Sequential Coherence)")
-    print("STATUS: 🔧 CORRECTED - Fixed-size windows for valid comparison")
-    print("="*80)
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + " BERTScore (Sequential Coherence)")
+            print("STATUS: 🔧 CORRECTED - Fixed-size windows for valid comparison")
+            print("="*80)
 
-    compute_bertscore = ComputeBERTSCORE("BERTScore")
-    compute_bertscore.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            compute_bertscore = ComputeBERTSCORE()
+            compute_bertscore.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_bertscore)
 
-    # ============================================================================
-    # METHOD 7: BERTOPIC (CORRECTED)
-    # ============================================================================
-    # STATUS: 🔧 CORRECTED - Now trains on ORIGINAL only, transforms all conditions
+        if method == 'BERTopic' and run ==1 :
+            methods_run += 1
 
-    print("\n" + "="*80)
-    print("METHOD 7/7: BERTopic")
-    print("STATUS: 🔧 CORRECTED - Model trained on original only")
-    print("="*80)        
+            # ============================================================================
+            # METHOD 7: BERTOPIC (CORRECTED)
+            # ============================================================================
+            # STATUS: 🔧 CORRECTED - Now trains on ORIGINAL only, transforms all conditions
 
-    compute_bertopic = COMPUTE_BERTOPIC("BERTopic")
-    compute_bertopic.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            print("\n" + "="*80)
+            print("METHOD " + str(methods_run) + "/" + str(total_methods) + " BERTopic")
+            print("STATUS: 🔧 CORRECTED - Model trained on original only")
+            print("="*80)        
+
+            compute_bertopic = COMPUTE_BERTopic()
+            compute_bertopic.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
+            executed_methods.append(compute_bertopic)
 
     # ============================================================================
     # FINAL RESULTS TABLE - 3-WAY COMPARISON
     # ============================================================================
 
-    # print("\n" + "="*80)
-    # print("  FINAL RESULTS - 3-WAY SHUFFLE COMPARISON")
-    # print("  (CORRECTED METHODOLOGY)")
-    # print("="*80)
+    print("\n" + "="*80)
+    print("  FINAL RESULTS - 3-WAY SHUFFLE COMPARISON")
+    print("  (CORRECTED METHODOLOGY)")
+    print("="*80)
 
-    # print("\n" + "="*100)
-    # print("SUMMARY TABLE: Cohen's d Effect Sizes")
-    # print("="*100)
-    # print(f"\n{'Method':<15} {'d(Word-Shuf)':>12} {'Verdict':>12} {'d(Sent-Shuf)':>12} {'Verdict':>12} {'n':>8}")
-    # print("-" * 75)
+    print("\n" + "="*100)
+    print("SUMMARY TABLE: Cohen's d Effect Sizes")
+    print("="*100)
+    print(f"\n{'Method':<15} {'d(Word-Shuf)':>12} {'Verdict':>12} {'d(Sent-Shuf)':>12} {'Verdict':>12} {'n':>8}")
+    print("-" * 75)
 
-    # method_order = ['Perplexity', 'Sentiment', 'TF-IDF', 'NER', 'LDA', 'BERTScore', 'BERTopic']
-
-    # for method_name in method_order:
-    #     r = results[method_name]
-    #     d_w = r['d_vs_word']
-    #     d_s = r['d_vs_sent']
-    #     n = r['n_observations']
+    for what_method in executed_methods:
+        r = what_method.results_data
+        d_w = r['d_vs_word']
+        d_s = r['d_vs_sent']
+        n = r['n_observations']
         
-    #     print(f"{method_name:<15} {d_w:>12.2f} {get_verdict(d_w):>12} {d_s:>12.2f} {get_verdict(d_s):>12} {n:>8}")
+        print(f"{what_method.method_name:<15} {d_w:>12.2f} {get_verdict(d_w):>12} {d_s:>12.2f} {get_verdict(d_s):>12} {n:>8}")
 
-    # print("="*100)
+    print("="*100)
 
-    # print("\n" + "="*100)
-    # print("MEAN VALUES BY CONDITION")
-    # print("="*100)
-    # print(f"\n{'Method':<15} {'Original':>12} {'Word-Shuf':>12} {'Sent-Shuf':>12}")
-    # print("-" * 55)
+    print("\n" + "="*100)
+    print("MEAN VALUES BY CONDITION")
+    print("="*100)
+    print(f"\n{'Method':<15} {'Original':>12} {'Word-Shuf':>12} {'Sent-Shuf':>12}")
+    print("-" * 55)
 
-    # for method_name in method_order:
-    #     r = results[method_name]
-    #     print(f"{method_name:<15} {r['original_mean']:>12.3f} {r['word_shuf_mean']:>12.3f} {r['sent_shuf_mean']:>12.3f}")
+    for what_method in executed_methods:
+        r = what_method.results_data
+        print(f"{what_method.method_name:<15} {r['original_mean']:>12.3f} {r['word_shuf_mean']:>12.3f} {r['sent_shuf_mean']:>12.3f}")
 
-    # print("="*100)
+    print("="*100)
 
-    # print("\n" + "="*80)
-    # print("DETAILED STATISTICS")
-    # print("="*80)
+    print("\n" + "="*80)
+    print("DETAILED STATISTICS")
+    print("="*80)
 
-    # for method_name in method_order:
-    #     r = results[method_name]
-    #     print(f"\n{method_name}:")
-    #     print(f"  d(orig vs word-shuffled):     {r['d_vs_word']:.3f} - {get_verdict(r['d_vs_word'])}")
-    #     print(f"  d(orig vs sentence-shuffled): {r['d_vs_sent']:.3f} - {get_verdict(r['d_vs_sent'])}")
-    #     print(f"  Original:       {r['original_mean']:.3f} (SD: {r['original_std']:.3f})")
-    #     print(f"  Word-shuffled:  {r['word_shuf_mean']:.3f} (SD: {r['word_shuf_std']:.3f})")
-    #     print(f"  Sent-shuffled:  {r['sent_shuf_mean']:.3f} (SD: {r['sent_shuf_std']:.3f})")
-    #     print(f"  N observations: {r['n_observations']}")
+    for what_method in executed_methods:
+        r = what_method.results_data
+        print(f"\n{what_method.method_name}:")
+        print(f"  d(orig vs word-shuffled):     {r['d_vs_word']:.3f} - {get_verdict(r['d_vs_word'])}")
+        print(f"  d(orig vs sentence-shuffled): {r['d_vs_sent']:.3f} - {get_verdict(r['d_vs_sent'])}")
+        print(f"  Original:       {r['original_mean']:.3f} (SD: {r['original_std']:.3f})")
+        print(f"  Word-shuffled:  {r['word_shuf_mean']:.3f} (SD: {r['word_shuf_std']:.3f})")
+        print(f"  Sent-shuffled:  {r['sent_shuf_mean']:.3f} (SD: {r['sent_shuf_std']:.3f})")
+        print(f"  N observations: {r['n_observations']}")
 
-    # print("\n" + "="*80)
-    # print("KEY INSIGHTS")
-    # print("="*80)
+    print("\n" + "="*80)
+    print("KEY INSIGHTS")
+    print("="*80)
 
-    # # Categorize by word-shuffle sensitivity
-    # strong_word = [m for m in results.keys() if results[m]['d_vs_word'] >= 3.0]
-    # pass_word = [m for m in results.keys() if 2.0 <= results[m]['d_vs_word'] < 3.0]
-    # border_word = [m for m in results.keys() if 1.0 <= results[m]['d_vs_word'] < 2.0]
-    # fail_word = [m for m in results.keys() if results[m]['d_vs_word'] < 1.0]
+    #TODO: review this final part
+    # Categorize by word-shuffle sensitivity
+    strong_word = [m for m in results.keys() if results[m]['d_vs_word'] >= 3.0]
+    pass_word = [m for m in results.keys() if 2.0 <= results[m]['d_vs_word'] < 3.0]
+    border_word = [m for m in results.keys() if 1.0 <= results[m]['d_vs_word'] < 2.0]
+    fail_word = [m for m in results.keys() if results[m]['d_vs_word'] < 1.0]
 
-    # # Categorize by sentence-shuffle sensitivity  
-    # strong_sent = [m for m in results.keys() if results[m]['d_vs_sent'] >= 3.0]
-    # pass_sent = [m for m in results.keys() if 2.0 <= results[m]['d_vs_sent'] < 3.0]
-    # border_sent = [m for m in results.keys() if 1.0 <= results[m]['d_vs_sent'] < 2.0]
-    # fail_sent = [m for m in results.keys() if results[m]['d_vs_sent'] < 1.0]
+    # Categorize by sentence-shuffle sensitivity  
+    strong_sent = [m for m in results.keys() if results[m]['d_vs_sent'] >= 3.0]
+    pass_sent = [m for m in results.keys() if 2.0 <= results[m]['d_vs_sent'] < 3.0]
+    border_sent = [m for m in results.keys() if 1.0 <= results[m]['d_vs_sent'] < 2.0]
+    fail_sent = [m for m in results.keys() if results[m]['d_vs_sent'] < 1.0]
 
-    # print(f"\n📊 WORD-SHUFFLE SENSITIVITY (total structure destruction):")
-    # print(f"   ✅✅ STRONG PASS (d ≥ 3.0): {len(strong_word)} methods")
-    # for m in strong_word:
-    #     print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
-    # print(f"   ✅ PASS (2.0 ≤ d < 3.0): {len(pass_word)} methods")
-    # for m in pass_word:
-    #     print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
-    # print(f"   ~ BORDERLINE (1.0 ≤ d < 2.0): {len(border_word)} methods")
-    # for m in border_word:
-    #     print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
-    # print(f"   ❌ FAILING (d < 1.0): {len(fail_word)} methods")
-    # for m in fail_word:
-    #     print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
+    print(f"\n📊 WORD-SHUFFLE SENSITIVITY (total structure destruction):")
+    print(f"   ✅✅ STRONG PASS (d ≥ 3.0): {len(strong_word)} methods")
+    for m in strong_word:
+        print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
+    print(f"   ✅ PASS (2.0 ≤ d < 3.0): {len(pass_word)} methods")
+    for m in pass_word:
+        print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
+    print(f"   ~ BORDERLINE (1.0 ≤ d < 2.0): {len(border_word)} methods")
+    for m in border_word:
+        print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
+    print(f"   ❌ FAILING (d < 1.0): {len(fail_word)} methods")
+    for m in fail_word:
+        print(f"      • {m} (d = {results[m]['d_vs_word']:.2f})")
 
-    # print(f"\n📊 SENTENCE-SHUFFLE SENSITIVITY (discourse structure only):")
-    # print(f"   ✅✅ STRONG PASS (d ≥ 3.0): {len(strong_sent)} methods")
-    # for m in strong_sent:
-    #     print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
-    # print(f"   ✅ PASS (2.0 ≤ d < 3.0): {len(pass_sent)} methods")
-    # for m in pass_sent:
-    #     print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
-    # print(f"   ~ BORDERLINE (1.0 ≤ d < 2.0): {len(border_sent)} methods")
-    # for m in border_sent:
-    #     print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
-    # print(f"   ❌ FAILING (d < 1.0): {len(fail_sent)} methods")
-    # for m in fail_sent:
-    #     print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
+    print(f"\n📊 SENTENCE-SHUFFLE SENSITIVITY (discourse structure only):")
+    print(f"   ✅✅ STRONG PASS (d ≥ 3.0): {len(strong_sent)} methods")
+    for m in strong_sent:
+        print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
+    print(f"   ✅ PASS (2.0 ≤ d < 3.0): {len(pass_sent)} methods")
+    for m in pass_sent:
+        print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
+    print(f"   ~ BORDERLINE (1.0 ≤ d < 2.0): {len(border_sent)} methods")
+    for m in border_sent:
+        print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
+    print(f"   ❌ FAILING (d < 1.0): {len(fail_sent)} methods")
+    for m in fail_sent:
+        print(f"      • {m} (d = {results[m]['d_vs_sent']:.2f})")
 
-    # # Identify methods sensitive to discourse but not just local coherence
-    # discourse_sensitive = [m for m in results.keys() 
-    #                     if results[m]['d_vs_sent'] >= 1.0 and results[m]['d_vs_word'] > results[m]['d_vs_sent']]
+    # Identify methods sensitive to discourse but not just local coherence
+    discourse_sensitive = [m for m in results.keys() 
+                        if results[m]['d_vs_sent'] >= 1.0 and results[m]['d_vs_word'] > results[m]['d_vs_sent']]
 
-    # print(f"\n🎯 DISCOURSE-LEVEL SENSITIVE METHODS:")
-    # print("   (Methods that detect both total destruction AND discourse-only disruption)")
-    # for m in discourse_sensitive:
-    #     ratio = results[m]['d_vs_word'] / results[m]['d_vs_sent'] if results[m]['d_vs_sent'] > 0 else 0
-    #     print(f"   • {m}: word d={results[m]['d_vs_word']:.2f}, sent d={results[m]['d_vs_sent']:.2f}, ratio={ratio:.1f}x")
+    print(f"\n🎯 DISCOURSE-LEVEL SENSITIVE METHODS:")
+    print("   (Methods that detect both total destruction AND discourse-only disruption)")
+    for m in discourse_sensitive:
+        ratio = results[m]['d_vs_word'] / results[m]['d_vs_sent'] if results[m]['d_vs_sent'] > 0 else 0
+        print(f"   • {m}: word d={results[m]['d_vs_word']:.2f}, sent d={results[m]['d_vs_sent']:.2f}, ratio={ratio:.1f}x")
 
-    # if not discourse_sensitive:
-    #     print("   None of the tested methods show significant discourse-level sensitivity.")
-    #     print("   This is the gap that Symbolic Entropy's Σ component is designed to fill.")
+    if not discourse_sensitive:
+        print("   None of the tested methods show significant discourse-level sensitivity.")
+        print("   This is the gap that Symbolic Entropy's Σ component is designed to fill.")
 
-    # print("\n" + "="*80)
-    # print("METHODOLOGICAL NOTE")
-    # print("="*80)
-    # print("CORRECTED METHODOLOGY:")
-    # print("  • TF-IDF: Vectorizer fit on ORIGINAL, transform applied to all conditions")
-    # print("  • LDA: Dictionary + model trained on ORIGINAL, inference on all conditions")
-    # print("  • BERTopic: fit_transform on ORIGINAL, transform() on shuffled conditions")
-    # print("  • BERTScore: Fixed-size token windows (not period-based sentence splitting)")
-    # print("      → Ensures valid comparison when periods are randomly distributed")
-    # print("  • Perplexity, Sentiment, NER: Pre-trained models (unchanged)")
-    # print("")
-    # print("This 3-way comparison tests semantic sensitivity at two levels:")
-    # print("  • WORD-SHUFFLE: Destroys ALL structure (local + discourse)")
-    # print("  • SENTENCE-SHUFFLE: Preserves local coherence, destroys discourse order")
-    # print("\nMethods sensitive to sentence-shuffle detect discourse-level organization")
-    # print("beyond just local word patterns - this is what SE's Σ component measures.")
-    # print("\nAll Cohen's d values calculated using proper pooled standard deviations")
-    # print("from multiple observations per condition.")
-    # print("="*80)
+    print("\n" + "="*80)
+    print("METHODOLOGICAL NOTE")
+    print("="*80)
+    print("CORRECTED METHODOLOGY:")
+    print("  • TF-IDF: Vectorizer fit on ORIGINAL, transform applied to all conditions")
+    print("  • LDA: Dictionary + model trained on ORIGINAL, inference on all conditions")
+    print("  • BERTopic: fit_transform on ORIGINAL, transform() on shuffled conditions")
+    print("  • BERTScore: Fixed-size token windows (not period-based sentence splitting)")
+    print("      → Ensures valid comparison when periods are randomly distributed")
+    print("  • Perplexity, Sentiment, NER: Pre-trained models (unchanged)")
+    print("")
+    print("This 3-way comparison tests semantic sensitivity at two levels:")
+    print("  • WORD-SHUFFLE: Destroys ALL structure (local + discourse)")
+    print("  • SENTENCE-SHUFFLE: Preserves local coherence, destroys discourse order")
+    print("\nMethods sensitive to sentence-shuffle detect discourse-level organization")
+    print("beyond just local word patterns - this is what SE's Σ component measures.")
+    print("\nAll Cohen's d values calculated using proper pooled standard deviations")
+    print("from multiple observations per condition.")
+    print("="*80)
 
-    # print("\n✅ 3-WAY SHUFFLE TEST SUITE COMPLETE (CORRECTED METHODOLOGY)!")
+    print("\n✅ 3-WAY SHUFFLE TEST SUITE COMPLETE (CORRECTED METHODOLOGY)!")
 
 if __name__ == "__main__":
     main()
