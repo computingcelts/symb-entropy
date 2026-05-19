@@ -60,7 +60,7 @@ input_files = {}
 
 # change to 1 those methods to run
 list_of_methods = {'Perplexity': 1,
-                    'Sentiment': 0,
+                    'Sentiment': 1,
                     'TF-IDF' :1,
                     'NER': 1,
                     'LDA': 1,
@@ -292,7 +292,7 @@ class ComputeSentiment(NLPMethod):
         
         print("✓ Model loaded")   
 
-    def segment_into_units(text, unit_size=50, min_words=10):
+    def segment_into_units(self, text, unit_size=50, min_words=10):
         words = text.split()
         segments = []
         for i in range(0, len(words), unit_size):
