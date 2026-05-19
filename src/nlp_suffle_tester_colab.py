@@ -31,12 +31,15 @@ print("="*80)
 # IMPORTS
 # ============================================================================
 
+import os
+
 import torch
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast, pipeline
 from bert_score import score as bertscore
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import spacy
 from gensim import corpora
 from gensim.models import LdaModel
 from bertopic import BERTopic
@@ -57,9 +60,9 @@ input_files = {}
 
 # change to 1 those methods to run
 list_of_methods = {'Perplexity': 0,
-                    'Sentiment': 0,
-                    'TF-IDF' :1,
-                    'NER': 1,
+                    'Sentiment': 1,
+                    'TF-IDF' :0,
+                    'NER': 0,
                     'LDA': 0,
                     'BERTScore':0,
                     'BERTopic' :0
@@ -273,6 +276,7 @@ class ComputePerplexity(NLPMethod):
         # TODO: review to make sure I understand what this is doing
         del self.gpt2_model, self.gpt2_tokenizer
         torch.cuda.empty_cache()
+        
 
 class ComputeSentiment(NLPMethod):
 
@@ -337,8 +341,8 @@ class ComputeSentiment(NLPMethod):
         super().print_results()
 
         # TODO: check this out what it does
-        del self.sentiment_analyzer
-        torch.cuda.empty_cache()
+        # del self.sentiment_analyzer
+        # torch.cuda.empty_cache()
 
 class ComputeTF_IDF(NLPMethod):
 
@@ -406,9 +410,6 @@ class ComputeTF_IDF(NLPMethod):
 class ComputeNER(NLPMethod):
 
     def __init__(self):
-        # spacy has to be imported here to avoid a bus error with OS semaphores
-        import spacy
-
         self.method_name = 'NER'
 
         print("Loading spaCy NER model...")
@@ -1003,4 +1004,9 @@ def main():
     print("\n✅ 3-WAY SHUFFLE TEST SUITE COMPLETE (CORRECTED METHODOLOGY)!")
 
 if __name__ == "__main__":
+    if torch.cuda.is_available():
+        print('CUDA is available')
+    else:
+        print('NO CUDA available')
+
     main()
