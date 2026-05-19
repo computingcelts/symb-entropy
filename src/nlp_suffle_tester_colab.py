@@ -59,13 +59,13 @@ selected_files = []
 input_files = {}
 
 # change to 1 those methods to run
-list_of_methods = {'Perplexity': 0,
-                    'Sentiment': 1,
-                    'TF-IDF' :0,
-                    'NER': 0,
-                    'LDA': 0,
-                    'BERTScore':0,
-                    'BERTopic' :0
+list_of_methods = {'Perplexity': 1,
+                    'Sentiment': 0,
+                    'TF-IDF' :1,
+                    'NER': 1,
+                    'LDA': 1,
+                    'BERTScore':1,
+                    'BERTopic' :1
             }
 
 total_methods = sum(list_of_methods.values())
@@ -229,7 +229,9 @@ class ComputePerplexity(NLPMethod):
 
         print("Loading GPT-2 model...")
         self.gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
+        self.gpt2_model.eval() 
         self.gpt2_tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+
         print("✓ Model loaded")
 
     def calculate_window_perplexity(self, text, window_size=200):
@@ -288,11 +290,21 @@ class ComputeSentiment(NLPMethod):
                                     model="distilbert-base-uncased-finetuned-sst-2-english",
                                     device=0 if torch.cuda.is_available() else -1)
         
-        print("✓ Model loaded")        
+        print("✓ Model loaded")   
+
+    def segment_into_units(text, unit_size=50, min_words=10):
+        words = text.split()
+        segments = []
+        for i in range(0, len(words), unit_size):
+            seg_words = words[i:i+unit_size]
+            if len(seg_words) >= min_words:
+                segments.append(' '.join(seg_words))
+        return segments
+
 
     def analyze_sentiment_chunks(self, text):
         """Analyze sentiment of text chunks"""
-        sentences = [s.strip() for s in text.replace('\n', ' ').split('.') if len(s.strip()) > 10]
+        sentences = self.segment_into_units(text, unit_size=80, min_words=10)
 
         chunks = []
         for sentence in sentences:
