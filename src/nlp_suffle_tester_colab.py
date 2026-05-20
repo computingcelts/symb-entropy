@@ -43,6 +43,7 @@ import spacy
 from gensim import corpora
 from gensim.models import LdaModel
 from bertopic import BERTopic
+from umap import UMAP
 from docx import Document
 import io
 import numpy as np
@@ -53,14 +54,12 @@ import inquirer
 import os
 
 local_input_path = "./texts"
-# Store all results - now with 3-way comparison
-results = {}
 selected_files = []
 input_files = {}
 
 # change to True those methods to be included
 list_of_methods = {'Perplexity': True,
-                    'Sentiment': False,
+                    'Sentiment': True,
                     'TF-IDF': True,
                     'NER': True,
                     'LDA': True,
@@ -655,10 +654,17 @@ class COMPUTE_BERTopic(NLPMethod):
 
         if len(orig_docs) < 10:
             return np.array([0.0]), np.array([0.0]), np.array([0.0])
+        
+
+        # Set the a seed to replicate same results for different runs
+        umap_model = UMAP(
+            random_state=42
+        )
 
         # fit_transform on original only
         print("   Training BERTopic on original text...")
         bertopic_model = BERTopic(
+            umap_model=umap_model,
             language="english",
             calculate_probabilities=True,
             verbose=False,
@@ -775,11 +781,6 @@ def print_results(executed_methods):
         ('~  BORDERLINE (1.0 ≤ d < 2.0)', 'BORDERLINE'),
         ('❌  FAIL (d < 1.0)',             'FAIL'),
     ]
-
-    print(tiers_word)
-    print("====")
-    print(tiers_sent)
-
 
     print(f"\n📊 WORD-SHUFFLE SENSITIVITY (total structure destruction):")
     for label, key in tier_labels:
