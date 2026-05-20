@@ -45,7 +45,6 @@ import spacy
 from sentence_transformers import SentenceTransformer
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast, pipeline
 from umap import UMAP
-from hdbscan import HDBSCAN
 import torch
 
 
@@ -55,7 +54,7 @@ local_input_path = "./texts"
 # change to True those methods to be included in the analysis
 # by default computes all methods
 list_of_methods = {'Perplexity': True,
-                    'Sentiment': False,
+                    'Sentiment': True,
                     'TF-IDF': True,
                     'NER': True,
                     'LDA': True,
@@ -686,19 +685,10 @@ class ComputeBERTopic(NLPMethod):
             random_state=42
         )
 
-        hdbscan_model = HDBSCAN(
-            min_cluster_size=15, 
-            metric='euclidean', 
-            cluster_selection_method='eom',
-            prediction_data=True,
-            core_dist_n_jobs=1  # <--- CRITICAL: Prevents multi-threading shuffle
-        )        
-
         # fit_transform on original only
         print("   Training BERTopic on original text...")
         bertopic_model = BERTopic(
             umap_model=umap_model,
-            hdbscan_model=hdbscan_model,            
             language="english",
             calculate_probabilities=True,
             verbose=False,
