@@ -61,14 +61,6 @@ list_of_methods = {'Perplexity': True,
                     'BERTopic' :True
             }
 
-list_of_methods = {'Perplexity': True,
-                    'Sentiment': False,
-                    'TF-IDF': False,
-                    'NER': False,
-                    'LDA': False,
-                    'BERTScore':False,
-                    'BERTopic' :False
-            }
 # counts the number of methods to run
 total_methods = len([m for m in list_of_methods.values() if m == True])
 
