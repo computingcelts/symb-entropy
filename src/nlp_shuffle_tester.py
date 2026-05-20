@@ -52,6 +52,7 @@ import torch
 local_input_path = "./texts"
 
 # change to True those methods to be included in the analysis
+# by default computes all methods
 list_of_methods = {'Perplexity': True,
                     'Sentiment': True,
                     'TF-IDF': True,
@@ -593,7 +594,7 @@ class ComputeLDA(NLPMethod):
         super().print_results()
 
 
-class ComputeBERTSCORE(NLPMethod):
+class ComputeBERTScore(NLPMethod):
 
     def __init__(self):
         self.method_name = 'BERTScore'
@@ -724,32 +725,29 @@ class COMPUTE_BERTopic(NLPMethod):
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
-        super().print_results()
+        super().print_results()    
 
-
+# ============================================================================
+# RESULTS REPORTING
+# ============================================================================
 
 def get_verdict(d):
     if d >= 3.0:
         return "✅✅ STRONG PASS"
     elif d >= 2.0:
-        return "✅ PASS"
+        return "  ✅ PASS"
     elif d >= 1.0:
-        return "~ BORDERLINE"
+        return "   ~ BORDERLINE"
     else:
-        return "❌ FAIL"
-    
-
-# ============================================================================
-# RESULTS REPORTING
-# ============================================================================
+        return "  ❌ FAIL"
 
 def print_results(executed_methods):
 
     print("\n" + "="*100)
     print("  FINAL RESULTS — 3-WAY SHUFFLE COMPARISON")
     print("="*100)
-    print(f"\n{'Method':<14} {'d(Word-Shuf)':>13} {'Verdict':<25} "
-          f"{'d(Sent-Shuf)':>13} {'Verdict':<25} {'n':>6}")
+    print(f"\n{'Method':<14} {'d(Word-Shuf)':>13} {'Verdict':<18} "
+          f"{'d(Sent-Shuf)':>13} {'Verdict':<18} {'n':>6}")
     print("-" * 90)
 
     for what_method in executed_methods:
@@ -805,10 +803,10 @@ def print_results(executed_methods):
     }
 
     tier_labels = [
-        ('✅✅ STRONG PASS (d ≥ 3.0)',    'STRONG PASS'),
-        ('✅  PASS (2.0 ≤ d < 3.0)',      'PASS'),
-        ('~  BORDERLINE (1.0 ≤ d < 2.0)', 'BORDERLINE'),
-        ('❌  FAIL (d < 1.0)',             'FAIL'),
+        ('✅✅ STRONG PASS (d ≥ 3.0)', 'STRONG PASS'),
+        ('  ✅  PASS (2.0 ≤ d < 3.0)', 'PASS'),
+        ('.  ~  BORDERLINE (1.0 ≤ d < 2.0)', 'BORDERLINE'),
+        ('. ❌  FAIL (d < 1.0)', 'FAIL'),
     ]
 
     print(f"\n📊 WORD-SHUFFLE SENSITIVITY (total structure destruction):")
@@ -881,6 +879,8 @@ def main():
 
     # Read files
     print("\n📖 Reading uploaded files...")
+    previous_time = time()
+
     original_text = read_file(input_files['original'])
     word_shuffled_text = read_file(input_files['word_randomized'])
     sent_shuffled_text = read_file(input_files['sentence_shuffled'])
@@ -891,6 +891,9 @@ def main():
 
     methods_run = 0
     executed_methods = []
+
+    print("Input files read in " + str(round((time()-previous_time),3)) + " secs.")
+    previous_time = time()
 
     for method, run in list_of_methods.items():    
 
@@ -988,7 +991,7 @@ def main():
             print("METHOD " + str(methods_run) + "/" + str(total_methods) + " BERTScore (Sequential Coherence)")
             print("="*80)
 
-            compute_bertscore = ComputeBERTSCORE()
+            compute_bertscore = ComputeBERTScore()
             compute_bertscore.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
             executed_methods.append(compute_bertscore)
 
@@ -1013,6 +1016,7 @@ def main():
     else:
         print("\nNo results to display.")
 
+    print("Total processing time: " + str(round((time()-previous_time),3)) + " secs.")
 
 if __name__ == "__main__":
     if torch.cuda.is_available():
