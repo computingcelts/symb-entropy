@@ -14,24 +14,18 @@
 
 print("="*80)
 print("  SYMBOLIC ENTROPY VALIDATION: 3-WAY SHUFFLE TEST SUITE")
-print("  (CORRECTED: Single model trained on original, applied to all)")
+print("  (Single model trained on original, applied to all)")
 print("="*80)
 print("\nThis will test 7 different NLP methods on:")
 print("  • Original text")
 print("  • Word-shuffled text (complete structure destruction)")
 print("  • Sentence-shuffled text (local coherence preserved)")
-print("\nExpected runtime: ~20-30 minutes total")
+print("\nExpected runtime: ~20-30 minutes total but it depends on the corpus size")
 print("="*80)
-
-# ============================================================================
-# INSTALL ALL LIBRARIES
-# ============================================================================
 
 # ============================================================================
 # IMPORTS
 # ============================================================================
-
-import os
 
 import torch
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast, pipeline
@@ -52,12 +46,13 @@ from collections import Counter
 from inquirer.themes import GreenPassion
 import inquirer
 import os
+from time import time
 
+
+# relative path where input texts are located
 local_input_path = "./texts"
-selected_files = []
-input_files = {}
 
-# change to True those methods to be included
+# change to True those methods to be included in the analysis
 list_of_methods = {'Perplexity': True,
                     'Sentiment': True,
                     'TF-IDF': True,
@@ -67,11 +62,20 @@ list_of_methods = {'Perplexity': True,
                     'BERTopic' :True
             }
 
+list_of_methods = {'Perplexity': True,
+                    'Sentiment': False,
+                    'TF-IDF': False,
+                    'NER': False,
+                    'LDA': False,
+                    'BERTScore':False,
+                    'BERTopic' :False
+            }
 # counts the number of methods to run
 total_methods = len([m for m in list_of_methods.values() if m == True])
 
 class NLPMethod:
     method_name = ''
+    completion_time = ''
 
     results_data = {
         'd_vs_word': 0.0,
@@ -85,15 +89,12 @@ class NLPMethod:
         'n_observations': 0
     }
     
-    # ctor
-    def __init__(self, method_name):
-        self.method_name = method_name
-
     # override this method with a specific computation
     # expects two texts as input
     def compute_method(self, original_text, comparison_text):
         print('Processing method: ', self.method_name)
 
+    # stores the results of a computation
     def set_results(self, d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, original_length):
         self.results_data = {
             'd_vs_word': d_word,
@@ -107,12 +108,13 @@ class NLPMethod:
             'n_observations': original_length
         }
 
+    # prints the results of a computation
     def print_results(self):
         print(f"\n✓ " + self.method_name + " complete:")
         print(f"   d(orig vs word-shuf) = {self.results_data['d_vs_word']:.2f}")
         print(f"   d(orig vs sent-shuf) = {self.results_data['d_vs_sent']:.2f}")
         print(f"   (n={self.results_data['n_observations']} windows)")
-
+        print("   Completion time: ",   self.completion_time)
 
 def validation_function(answers, current):
     print('Current selected value(s): ', current)
@@ -248,6 +250,7 @@ class ComputePerplexity(NLPMethod):
 
     def __init__(self):
         self.method_name = 'Perplexity'
+        self.completion_time = ''
 
         print("Loading GPT-2 model...")
         self.gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2')
@@ -279,7 +282,9 @@ class ComputePerplexity(NLPMethod):
         return np.array(perplexities)
 
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
-        
+
+        computation_start = time()
+
         print("\n⚙️  Calculating " + self.method_name + " for ORIGINAL text...")
         original_analysis = self.calculate_window_perplexity(original_text)
 
@@ -292,6 +297,8 @@ class ComputePerplexity(NLPMethod):
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
 
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
+
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
         super().print_results()
@@ -299,6 +306,7 @@ class ComputePerplexity(NLPMethod):
         # Clean up memory
         del self.gpt2_model, self.gpt2_tokenizer
         torch.cuda.empty_cache()
+
         
 
 class ComputeSentiment(NLPMethod):
@@ -338,6 +346,8 @@ class ComputeSentiment(NLPMethod):
         
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
 
+        computation_start = time()
+
         print("\n⚙️  Analyzing " + self.method_name + " ORIGINAL text...")
         original_analysis = self.analyze_sentiment_chunks(original_text)
 
@@ -349,6 +359,8 @@ class ComputeSentiment(NLPMethod):
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
+
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
@@ -408,6 +420,8 @@ class ComputeTF_IDF(NLPMethod):
          
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
 
+        computation_start = time()
+
         print("\n⚙️  Calculating " + self.method_name + " coherence (single vectorizer)...")
 
         original_analysis, word_shuffled_analysis, sentence_shuffled_analysis = self.calculate_tfidf_coherence_corrected(
@@ -416,6 +430,8 @@ class ComputeTF_IDF(NLPMethod):
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
+
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
@@ -453,6 +469,9 @@ class ComputeNER(NLPMethod):
         return np.array(densities)
     
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
+
+        computation_start = time()
+        
         print("\n⚙️  Analyzing " + self.method_name + " ORIGINAL text...")
         original_analysis = self.calculate_sentence_ner_density(original_text)
 
@@ -464,6 +483,8 @@ class ComputeNER(NLPMethod):
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
+
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
@@ -561,6 +582,8 @@ class ComputeLDA(NLPMethod):
         return orig_probs, word_probs, sent_probs
     
     def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
+
+        computation_start = time()
         
         original_analysis, word_shuffled_analysis, sentence_shuffled_analysis = self.calculate_lda_corrected(
             original_text, word_shuffled_text, sentence_shuffled_text
@@ -568,6 +591,8 @@ class ComputeLDA(NLPMethod):
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)
+
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
@@ -616,7 +641,10 @@ class ComputeBERTSCORE(NLPMethod):
             print(f"   BERTScore error: {e}")
             return np.array([0.0])        
     
-    def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):    
+    def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
+
+        computation_start = time()
+
         print("\n⚙️  Calculating sequential coherence for ORIGINAL...")
         original_analysis = self.calculate_bertscore_window_coherence(original_text)
 
@@ -628,6 +656,8 @@ class ComputeBERTSCORE(NLPMethod):
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)    
+
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
@@ -686,12 +716,17 @@ class COMPUTE_BERTopic(NLPMethod):
 
         return orig_max_probs, word_max_probs, sent_max_probs
     
-    def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):    
+    def compute_method(self, original_text, word_shuffled_text, sentence_shuffled_text):
+
+        computation_start = time()
+
         print("\n⚙️  Running BERTopic (single model)...")
         original_analysis, word_shuffled_analysis, sentence_shuffled_analysis  = self.calculate_bertopic_corrected(original_text, word_shuffled_text, sentence_shuffled_text)
 
         d_word, orig_mean, word_mean, orig_std, word_std = calculate_cohens_d(original_analysis, word_shuffled_analysis)
         d_sent, _, sent_mean, _, sent_std = calculate_cohens_d(original_analysis, sentence_shuffled_analysis)    
+
+        self.completion_time = self.method_name + " took about " + str(round((time()-computation_start),3)) + " secs."
 
         super().set_results(d_word,d_sent,orig_mean,word_mean,sent_mean,orig_std,word_std,sent_std, len(original_analysis))
 
@@ -717,10 +752,10 @@ def get_verdict(d):
 def print_results(executed_methods):
 
     print("\n" + "="*100)
-    print("  FINAL RESULTS — 3-WAY SHUFFLE COMPARISON  (CANONICAL v1.0)")
+    print("  FINAL RESULTS — 3-WAY SHUFFLE COMPARISON")
     print("="*100)
-    print(f"\n{'Method':<14} {'d(Word-Shuf)':>13} {'Verdict':<18} "
-          f"{'d(Sent-Shuf)':>13} {'Verdict':<18} {'n':>6}")
+    print(f"\n{'Method':<14} {'d(Word-Shuf)':>13} {'Verdict':<25} "
+          f"{'d(Sent-Shuf)':>13} {'Verdict':<25} {'n':>6}")
     print("-" * 90)
 
     for what_method in executed_methods:
@@ -754,6 +789,7 @@ def print_results(executed_methods):
         print(f"  Word-shuffled:   mean={r['word_shuf_mean']:.4f}  SD={r['word_shuf_std']:.4f}")
         print(f"  Sent-shuffled:   mean={r['sent_shuf_mean']:.4f}  SD={r['sent_shuf_std']:.4f}")
         print(f"  N observations:  {r['n_observations']}")
+        print("  Completion time: ", what_method.completion_time)
 
 
     # ── Key insights ────────────────────────────────────────────────
