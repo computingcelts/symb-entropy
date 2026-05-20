@@ -297,7 +297,6 @@ class ComputePerplexity(NLPMethod):
         super().print_results()
 
         # Clean up memory
-        # TODO: review to make sure I understand what this is doing
         del self.gpt2_model, self.gpt2_tokenizer
         torch.cuda.empty_cache()
         
@@ -702,11 +701,11 @@ class COMPUTE_BERTopic(NLPMethod):
 
 def get_verdict(d):
     if d >= 3.0:
-        return "✅✅ STRONG"
+        return "✅✅ STRONG PASS"
     elif d >= 2.0:
         return "✅ PASS"
     elif d >= 1.0:
-        return "~ BORDER"
+        return "~ BORDERLINE"
     else:
         return "❌ FAIL"
     
@@ -813,24 +812,6 @@ def print_results(executed_methods):
         print("   This is the gap that Symbolic Entropy's Σ component is designed to fill.")
 
     print("\n" + "="*80)
-    print("METHODOLOGICAL NOTE")
-    print("="*80)
-    fixes = [
-        "[2]  segment_into_units(): fixed-size token chunks — all 5 segmentation methods",
-        "[3]  GPT-2: .eval() before inference — deterministic perplexity",
-        "[4]  Sentiment: segment_into_units(80) — consistent chunk sizes",
-        "[5]  TF-IDF: segment_into_units(50) + single vectorizer on original (retained)",
-        "[6]  NER: segment_into_units(50) — consistent chunk sizes",
-        "[7]  LDA: segment_into_units(50) + original-only training",
-        "[8]  BERTScore: batched bertscore() call — hours vs minutes on LOTR-scale texts",
-        "[9]  BERTopic: segment_into_units(50) + original-only training (honest eval)",
-        "[10] KEY INSIGHTS: correct results dict population",
-        "[11] Sentiment model: memory released after use",
-    ]
-    for fix in fixes:
-        print(f"  {fix}")
-    print("="*80)
-
     print("\n✅ 3-WAY SHUFFLE TEST SUITE COMPLETE!")
 
 
