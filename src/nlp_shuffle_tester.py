@@ -47,7 +47,6 @@ from transformers import GPT2LMHeadModel, GPT2TokenizerFast, pipeline
 from umap import UMAP
 import torch
 
-
 # relative path where input texts are located
 local_input_path = "./texts"
 
@@ -731,7 +730,7 @@ class ComputeBERTopic(NLPMethod):
 # RESULTS REPORTING
 # ============================================================================
 
-def get_verdict(d):
+def get_veredict(d):
     if d >= 3.0:
         return "✅✅ STRONG PASS"
     elif d >= 2.0:
@@ -746,15 +745,15 @@ def print_results(executed_methods):
     print("\n" + "="*100)
     print("  FINAL RESULTS — 3-WAY SHUFFLE COMPARISON")
     print("="*100)
-    print(f"\n{'Method':<14} {'d(Word-Shuf)':>13} {'Verdict':<18} "
-          f"{'d(Sent-Shuf)':>13} {'Verdict':<18} {'n':>6}")
-    print("-" * 90)
+    print(f"\n{'Method':<16} {'d(Word-Shuf)':>13} {'Veredict':<18} "
+          f"{'d(Sent-Shuf)':>13} {'Veredict':<18} {'n':>6}")
+    print("-" * 100)
 
     for what_method in executed_methods:
         r = what_method.results_data
-        print(f"{what_method.method_name:<14} "
-              f"{r['d_vs_word']:>13.3f} {get_verdict(r['d_vs_word']):<18} "
-              f"{r['d_vs_sent']:>13.3f} {get_verdict(r['d_vs_sent']):<18} "
+        print(f"{what_method.method_name:<16} "
+              f"{r['d_vs_word']:>13.3f} {get_veredict(r['d_vs_word']):<18}"
+              f"{r['d_vs_sent']:>13.3f} {get_veredict(r['d_vs_sent']):<18} "
               f"{r['n_observations']:>6}")
     print("="*100)
 
@@ -775,8 +774,8 @@ def print_results(executed_methods):
     for what_method in executed_methods:
         r = what_method.results_data
         print(f"\n{what_method.method_name}:")
-        print(f"  d(orig vs word-shuffled):     {r['d_vs_word']:.3f}  {get_verdict(r['d_vs_word'])}")
-        print(f"  d(orig vs sentence-shuffled): {r['d_vs_sent']:.3f}  {get_verdict(r['d_vs_sent'])}")
+        print(f"  d(orig vs word-shuffled):     {r['d_vs_word']:.3f}  {get_veredict(r['d_vs_word'])}")
+        print(f"  d(orig vs sentence-shuffled): {r['d_vs_sent']:.3f}  {get_veredict(r['d_vs_sent'])}")
         print(f"  Original:        mean={r['original_mean']:.4f}  SD={r['original_std']:.4f}")
         print(f"  Word-shuffled:   mean={r['word_shuf_mean']:.4f}  SD={r['word_shuf_std']:.4f}")
         print(f"  Sent-shuffled:   mean={r['sent_shuf_mean']:.4f}  SD={r['sent_shuf_std']:.4f}")
@@ -805,8 +804,8 @@ def print_results(executed_methods):
     tier_labels = [
         ('✅✅ STRONG PASS (d ≥ 3.0)', 'STRONG PASS'),
         ('  ✅  PASS (2.0 ≤ d < 3.0)', 'PASS'),
-        ('.  ~  BORDERLINE (1.0 ≤ d < 2.0)', 'BORDERLINE'),
-        ('. ❌  FAIL (d < 1.0)', 'FAIL'),
+        ('   ~  BORDERLINE (1.0 ≤ d < 2.0)', 'BORDERLINE'),
+        ('  ❌  FAIL (d < 1.0)', 'FAIL'),
     ]
 
     print(f"\n📊 WORD-SHUFFLE SENSITIVITY (total structure destruction):")
