@@ -1,5 +1,5 @@
 # ============================================================================
-# COMPLETE SHUFFLE TEST SUITE - ALL 7 METHODS WITH 3-WAY COMPARISON
+# COMPLETE SHUFFLE TEST SUITE - UP TO 7 METHODS WITH 3-WAY COMPARISON
 # ============================================================================
 # CORRECTED VERSION: Models trained ONCE on original, applied to all conditions
 # 
@@ -8,8 +8,6 @@
 #   2. WORD-SHUFFLED text (destroys all structure)
 #   3. SENTENCE-SHUFFLED text (preserves local, destroys discourse structure)
 #
-# METHODOLOGICAL FIX: LDA, BERTopic, and TF-IDF now train on original only,
-# then apply the SAME model to all conditions for valid comparison.
 # ============================================================================
 
 print("="*80)
@@ -27,26 +25,27 @@ print("="*80)
 # IMPORTS
 # ============================================================================
 
-import torch
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast, pipeline
+from collections import Counter
+import io
+import os
+import re
+from time import time
+
 from bert_score import score as bertscore
-from sentence_transformers import SentenceTransformer
+from bertopic import BERTopic
+from docx import Document
+from gensim import corpora
+from gensim.models import LdaModel
+from inquirer.themes import GreenPassion
+import inquirer
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import spacy
-from gensim import corpora
-from gensim.models import LdaModel
-from bertopic import BERTopic
+from sentence_transformers import SentenceTransformer
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast, pipeline
 from umap import UMAP
-from docx import Document
-import io
-import numpy as np
-import re
-from collections import Counter
-from inquirer.themes import GreenPassion
-import inquirer
-import os
-from time import time
+import torch
 
 
 # relative path where input texts are located
@@ -116,48 +115,51 @@ class NLPMethod:
         print(f"   (n={self.results_data['n_observations']} windows)")
         print("   Completion time: ",   self.completion_time)
 
-def validation_function(answers, current):
-    print('Current selected value(s): ', current)
-    if len(current) == 0:
-        raise inquirer.errors.ValidationError(
-            '', reason='You have to select at least one option.')
-    return True
+# class to allow file selection
+class SelectFiles():
 
-def get_txt_doc_files(path):
-    if not os.path.isdir(path):
-        return []
-    return sorted([
-        filename for filename in os.listdir(path)
-        if os.path.isfile(os.path.join(path, filename)) and (filename.endswith('.txt') or filename.endswith('.docx'))
-    ])
+    def validation_function(self, answers, current):
+        print('Current selected value(s): ', current)
+        if len(current) == 0:
+            raise inquirer.errors.ValidationError(
+                '', reason='You have to select at least one option.')
+        return True
+
+    def get_txt_doc_files(self, path):
+        if not os.path.isdir(path):
+            return []
+        return sorted([
+            filename for filename in os.listdir(path)
+            if os.path.isfile(os.path.join(path, filename)) and (filename.endswith('.txt') or filename.endswith('.docx'))
+        ])
 
 
-def select_files_to_process(directory_path):
-    files = get_txt_doc_files(directory_path)
-    if not files:
-        print(f"No .txt .docx files found in {directory_path}. Choose a different directory.")
-        return []
+    def select_files_to_process(self, directory_path):
+        files = self.get_txt_doc_files(directory_path)
+        if not files:
+            print(f"No .txt .docx files found in {directory_path}. Choose a different directory.")
+            return []
 
-    choices = ['All'] + files + ['Exit']
-    questions = [
-        inquirer.Checkbox(
-            'selected_files',
-            message=f'A total of {len(files)} files found in {directory_path}. Choose one or more:',
-            choices=choices,
-            validate=validation_function
-        )
-    ]
+        choices = ['All'] + files + ['Exit']
+        questions = [
+            inquirer.Checkbox(
+                'selected_files',
+                message=f'A total of {len(files)} files found in {directory_path}. Choose one or more:',
+                choices=choices,
+                validate=self.validation_function
+            )
+        ]
 
-    answers = inquirer.prompt(questions)
-    if not answers or 'selected_files' not in answers:
-        return []
+        answers = inquirer.prompt(questions)
+        if not answers or 'selected_files' not in answers:
+            return []
 
-    selected = answers['selected_files']
-    if 'Exit' in selected:
-        exit()
-    if 'All' in selected:
-        return [os.path.join(directory_path, f) for f in files]
-    return [os.path.join(directory_path, f) for f in selected]
+        selected = answers['selected_files']
+        if 'Exit' in selected:
+            exit()
+        if 'All' in selected:
+            return [os.path.join(directory_path, f) for f in files]
+        return [os.path.join(directory_path, f) for f in selected]
 
 
 # ============================================================================
@@ -861,7 +863,8 @@ def main():
     print("📤 PLEASE UPLOAD YOUR 3 FILES")
     print("="*80)
 
-    selected_files = select_files_to_process(local_input_path)
+    prompt_select_files = SelectFiles()
+    selected_files = prompt_select_files.select_files_to_process(local_input_path)
     input_files = {}
 
     if selected_files:
