@@ -115,9 +115,13 @@ except ImportError:
 
 # Default text files (can be overridden via command line)
 # Set to None or empty string to skip that condition
-TEXT_FILE = "C:/Users/Michael Kurian/Desktop/Advanced Researches/TXT Files for SE/LOTR FELLOWSHIP SE.txt"
-WORD_SHUFFLE_FILE = "C:/Users/Michael Kurian/Desktop/Advanced Researches/TXT Files for SE/LOTR Word Randomized SE.txt"
-SENT_SHUFFLE_FILE = "C:/Users/Michael Kurian/Desktop/Advanced Researches/TXT Files for SE/LOTR Sentence Shuffled SE.txt"
+
+local_input_path = "./texts/"
+local_output_path = "./output/"
+
+TEXT_FILE = local_input_path+"lotr_fellowship_original.txt"
+WORD_SHUFFLE_FILE = local_input_path+"lotr_word_randomized.txt"
+SENT_SHUFFLE_FILE = local_input_path+"lotr_sentence_shuffled.txt"
 
 # Random seed for reproducibility
 RANDOM_SEED = 42
@@ -1632,7 +1636,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     # Generate output prefix from original filename
-    output_prefix = os.path.splitext(os.path.basename(TEXT_FILE))[0]
+    output_prefix = local_output_path + os.path.splitext(os.path.basename(TEXT_FILE))[0]
     
     # Storage for comparison
     word_results_df = None
