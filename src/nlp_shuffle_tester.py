@@ -660,7 +660,7 @@ class ComputeBERTScore(NLPMethod):
 
     
 
-class COMPUTE_BERTopic(NLPMethod):
+class ComputeBERTopic(NLPMethod):
 
     def __init__(self):
         self.method_name = 'BERTopic'
@@ -680,7 +680,7 @@ class COMPUTE_BERTopic(NLPMethod):
             return np.array([0.0]), np.array([0.0]), np.array([0.0])
         
 
-        # Set the a seed to replicate same results for different runs
+        # Set the seed to replicate same results for different runs
         umap_model = UMAP(
             random_state=42
         )
@@ -1007,7 +1007,7 @@ def main():
             print("METHOD " + str(methods_run) + "/" + str(total_methods) + " BERTopic")
             print("="*80)        
 
-            compute_bertopic = COMPUTE_BERTopic()
+            compute_bertopic = ComputeBERTopic()
             compute_bertopic.compute_method(original_text, word_shuffled_text, sent_shuffled_text)
             executed_methods.append(compute_bertopic)
 
